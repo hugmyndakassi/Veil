@@ -1,4 +1,4 @@
-﻿ /*
+ /*
  * PROJECT:   Veil
  * FILE:      Veil.System.ConfigurationManager.h
  * PURPOSE:   This file is part of Veil.
@@ -270,7 +270,7 @@ typedef enum _KEY_SET_INFORMATION_CLASS
     KeyWow64FlagsInformation, // KEY_WOW64_FLAGS_INFORMATION
     KeyControlFlagsInformation, // KEY_CONTROL_FLAGS_INFORMATION
     KeySetVirtualizationInformation, // KEY_SET_VIRTUALIZATION_INFORMATION
-    KeySetDebugInformation,
+    KeySetDebugInformation,           // KEY_SET_DEBUG_INFORMATION
     KeySetHandleTagsInformation, // KEY_HANDLE_TAGS_INFORMATION
     KeySetLayerInformation, // KEY_SET_LAYER_INFORMATION
     MaxKeySetInfoClass
@@ -295,7 +295,18 @@ typedef struct _KEY_WRITE_TIME_INFORMATION
 typedef struct _KEY_WOW64_FLAGS_INFORMATION
 {
     ULONG UserFlags;
-} KEY_WOW64_FLAGS_INFORMATION, * PKEY_WOW64_FLAGS_INFORMATION;
+} KEY_WOW64_FLAGS_INFORMATION, *PKEY_WOW64_FLAGS_INFORMATION;
+
+/**
+ * The KEY_SET_DEBUG_INFORMATION structure contains debug flags for a key.
+ *
+ * The fields include:
+ * - Flags: A set of debug flags associated with the key.
+ */
+typedef struct _KEY_SET_DEBUG_INFORMATION
+{
+    ULONG Flags;
+} KEY_SET_DEBUG_INFORMATION, *PKEY_SET_DEBUG_INFORMATION;
 
 /**
  * The KEY_HANDLE_TAGS_INFORMATION structure contains information about the handle tags for a key.

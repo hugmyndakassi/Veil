@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.Prefetcher.h
  * PURPOSE:   This file is part of Veil.
@@ -46,6 +46,22 @@ typedef enum _PREFETCHER_INFORMATION_CLASS
 #define PREFETCHER_INFORMATION_VERSION 23 // rev
 #define PREFETCHER_INFORMATION_MAGIC ('kuhC') // rev
 
+// rev
+#define PF_RETRIEVE_TRACE_VERSION 31 // rev
+#define PF_RETRIEVE_TRACE_MAGIC ('ASCC') // rev
+
+// rev
+typedef struct _PF_RETRIEVE_TRACE_PAGE_ENTRY
+{
+    UCHAR Data[16];
+} PF_RETRIEVE_TRACE_PAGE_ENTRY, *PPF_RETRIEVE_TRACE_PAGE_ENTRY;
+
+// rev
+typedef struct _PF_RETRIEVE_TRACE_SECTION_ENTRY
+{
+    UCHAR Data[24];
+} PF_RETRIEVE_TRACE_SECTION_ENTRY, *PPF_RETRIEVE_TRACE_SECTION_ENTRY;
+
 typedef struct _PREFETCHER_INFORMATION
 {
     _In_ ULONG Version;
@@ -58,8 +74,19 @@ typedef struct _PREFETCHER_INFORMATION
 // rev
 typedef struct _PF_RETRIEVE_TRACE
 {
-    UCHAR Buffer[1];
-} PF_RETRIEVE_TRACE, * PPF_RETRIEVE_TRACE;
+    ULONG Version; // PF_RETRIEVE_TRACE_VERSION
+    ULONG Magic; // PF_RETRIEVE_TRACE_MAGIC
+    ULONG Size; // Total buffer size, including the variable payload that follows this header.
+    ULONG Spare0; // Opaque trace state copied from the completed trace.
+    UCHAR OpaqueHeader[0x40]; // Opaque fixed fields copied from the completed trace.
+    ULONG PageEntriesOffset; // Offset from the start of this structure to PF_RETRIEVE_TRACE_PAGE_ENTRY[PageEntriesCount].
+    ULONG PageEntriesCount; // Count of 16-byte PF_RETRIEVE_TRACE_PAGE_ENTRY records.
+    ULONG TraceLimitsMaxNumPages;
+    ULONG TraceLimitsMaxNumSections;
+    ULONG SectionEntriesOffset; // Offset from the start of this structure to PF_RETRIEVE_TRACE_SECTION_ENTRY[SectionEntriesCount].
+    ULONG SectionEntriesCount; // Count of 24-byte PF_RETRIEVE_TRACE_SECTION_ENTRY records.
+    UCHAR OpaqueTail[0x30]; // Opaque fixed fields copied from the completed trace.
+} PF_RETRIEVE_TRACE, *PPF_RETRIEVE_TRACE;
 
 typedef enum _PF_ENABLE_STATUS
 {
@@ -157,7 +184,7 @@ typedef enum _SUPERFETCH_INFORMATION_CLASS
     SuperfetchSystemParameters,                // q: PF_SYSTEM_SUPERFETCH_PARAMETERS
     SuperfetchLogEvent,                        // s: PF_LOG_EVENT_DATA
     SuperfetchGenerateTrace,                   // s: PF_GENERATE_TRACE_CONTROL
-    SuperfetchPrefetch,
+    SuperfetchPrefetch,                        // s: PF_PREFETCH_REQUEST
     SuperfetchPfnQuery,                        // q: PF_PFN_PRIO_REQUEST
     SuperfetchPfnSetPriority,                  // s: PF_PFN_PRIO_REQUEST // MmSetPfnListInfo
     SuperfetchPrivSourceQuery,                 // q: PF_PRIVSOURCE_QUERY_REQUEST
@@ -173,7 +200,7 @@ typedef enum _SUPERFETCH_INFORMATION_CLASS
     SuperfetchTracingControl,                  // s: PF_ACCESS_TRACING_CONTROL
     SuperfetchTrimWhileAgingControl,           // s: PF_TRIM_WHILE_AGING_CONTROL
     SuperfetchRepurposedByPrefetch,            // q: PF_REPURPOSED_BY_PREFETCH_INFO // 20
-    SuperfetchChannelPowerRequest,
+    SuperfetchChannelPowerRequest,             // q: not implemented
     SuperfetchMovePages,                       // s: PF_PFN_PRIO_REQUEST // MmRelocatePfnList
     SuperfetchVirtualQuery,                    // q: PF_VIRTUAL_QUERY
     SuperfetchCombineStatsQuery,               // q: PF_PAGECOMBINE_AGGREGATE_STAT
@@ -232,7 +259,112 @@ typedef struct _PF_SYSTEM_SUPERFETCH_PARAMETERS
     ULONG ScenarioPrefetchTimeoutStandby;
     ULONG ScenarioPrefetchTimeoutHibernate;
     ULONG ScenarioPrefetchTimeoutHiberBoot;
-} PF_SYSTEM_SUPERFETCH_PARAMETERS, * PPF_SYSTEM_SUPERFETCH_PARAMETERS;
+} PF_SYSTEM_SUPERFETCH_PARAMETERS, *PPF_SYSTEM_SUPERFETCH_PARAMETERS;
+
+// rev
+typedef struct _PF_PREFETCH_RANGE_INFO
+{
+    ULONG RangeCount;
+    ULONG Reserved;
+    ULONG RangesOffset;
+} PF_PREFETCH_RANGE_INFO, *PPF_PREFETCH_RANGE_INFO;
+
+// rev
+typedef struct _PF_PREFETCH_PATH_INFO
+{
+    ULONG PathOffset;
+    ULONG Reserved;
+    ULONG PathLength; // WCHAR count, excluding terminator
+} PF_PREFETCH_PATH_INFO, *PPF_PREFETCH_PATH_INFO;
+
+// rev
+typedef struct _PF_PREFETCH_FILE_INFO
+{
+    ULONG Flags;
+    ULONG Reserved0;
+    ULONGLONG Reserved1; // non-zero for some file classes
+    PF_PREFETCH_RANGE_INFO Ranges;
+    ULONG Reserved2;
+    PWSTR Path;          // patched from PathOffset during processing
+    ULONG PathLength;    // WCHAR count, excluding terminator
+    ULONG Reserved3;
+} PF_PREFETCH_FILE_INFO, *PPF_PREFETCH_FILE_INFO;
+
+// rev
+typedef struct _PF_PREFETCH_VOLUME_INFO
+{
+    LARGE_INTEGER VolumeCreationTime;
+    ULONG VolumeSerialNumber;
+    ULONG Flags;
+    ULONG PrefetchFileCountTimes2;   // number of PF_PREFETCH_FILE_INFO entries << 1
+    ULONG PrefetchFileInfoOffset;    // offset to PF_PREFETCH_FILE_INFO array
+    USHORT VolumePathLength;         // WCHAR count, excluding terminator
+    USHORT Reserved0;
+    ULONG Reserved1;
+    PWSTR VolumePath;                // patched from VolumePathOffset during processing
+} PF_PREFETCH_VOLUME_INFO, *PPF_PREFETCH_VOLUME_INFO;
+
+// rev
+typedef struct _PF_PREFETCH_SOURCE_INFO
+{
+    ULONG Reserved0;
+    ULONG Reserved1;
+    ULONG Reserved2;
+    ULONG Reserved3;
+    struct _PF_PHYSICAL_MEMORY_RANGE *Ranges; // patched from RangesOffset during processing
+    PF_PREFETCH_RANGE_INFO RangeInfo;
+    ULONG Reserved4;
+} PF_PREFETCH_SOURCE_INFO, *PPF_PREFETCH_SOURCE_INFO;
+
+#define PF_PREFETCH_REQUEST_VERSION 13
+
+// rev
+typedef struct _PF_PREFETCH_REQUEST
+{
+    ULONG Version;                   // PF_PREFETCH_REQUEST_VERSION
+    ULONG Size;                      // entire buffer size
+    ULONG VolumeCount;
+    ULONG PrefetchFileCount;
+    ULONG PathCount;
+    ULONG SourceCount;
+    ULONG UnicodeTextSize;
+    USHORT PrefetchPriority;
+    USHORT VolumePrefetchPriority;
+    ULONG VolumeInfoOffset;
+    ULONG Reserved0;
+    ULONG PrefetchFileInfoOffset;
+    ULONG Reserved1;
+    ULONG PathInfoOffset;
+    ULONG Reserved2;
+    ULONG SourceInfoOffset;
+    ULONG Reserved3;
+    ULONG UnicodeTextOffset;
+    ULONG Reserved4;
+    PVOID CompletionEvent;           // optional KEVENT handle on input, object pointer after capture
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG ContinueIO : 1;
+            ULONG LowPowerMode : 1;
+            ULONG UseScenarioTimeouts : 1;
+            ULONG ReservedFlags : 29;
+        };
+    };
+    UCHAR ScenarioType;              // must be < 6
+    UCHAR Reserved5[3];
+    ULONG MetadataPrefetchCount;
+    ULONG PrivatePrefetchCount;
+    ULONG Reserved6;
+    ULONG PrivatePageCount;
+    ULONG MetadataPrefetchTime;
+    ULONG Reserved7;
+    ULONG Reserved8;
+    ULONG PrivatePrefetchTime;
+    ULONG Reserved9;
+    ULONG Reserved10;
+} PF_PREFETCH_REQUEST, *PPF_PREFETCH_REQUEST;
 
 // rev
 typedef enum _PF_EVENT_TYPE
@@ -439,14 +571,13 @@ typedef struct _PF_ROBUST_PROCESS_ENTRY
 {
     ULONG ImagePathHash;
     ULONG Pid;
-    ULONG Alignment;
-} PF_ROBUST_PROCESS_ENTRY, * PPF_ROBUST_PROCESS_ENTRY;
+} PF_ROBUST_PROCESS_ENTRY, *PPF_ROBUST_PROCESS_ENTRY;
 
 // rev
 typedef struct _PF_ROBUST_FILE_ENTRY
 {
-    ULONG FilePathHash;
-} PF_ROBUST_FILE_ENTRY, * PPF_ROBUST_FILE_ENTRY;
+    ULONGLONG FilePathHash;
+} PF_ROBUST_FILE_ENTRY, *PPF_ROBUST_FILE_ENTRY;
 
 // rev
 typedef enum _PF_ROBUSTNESS_CONTROL_COMMAND
@@ -459,20 +590,32 @@ typedef enum _PF_ROBUSTNESS_CONTROL_COMMAND
 } PF_ROBUSTNESS_CONTROL_COMMAND;
 
 // rev
-#define PF_ROBUSTNESS_CONTROL_VERSION 1
+#define PF_ROBUSTNESS_CONTROL_VERSION 3
 
 // rev
 typedef struct _PF_ROBUSTNESS_CONTROL
 {
-    ULONG Version;
-    PF_ROBUSTNESS_CONTROL_COMMAND Command;
+    union
+    {
+        ULONG VersionAndCommand;
+        struct
+        {
+            USHORT Version; // PF_ROBUSTNESS_CONTROL_VERSION
+            USHORT Command; // PF_ROBUSTNESS_CONTROL_COMMAND
+        };
+    };
     ULONG DeprioProcessCount;
     ULONG ExemptProcessCount;
     ULONG DeprioFileCount;
     ULONG ExemptFileCount;
-    PF_ROBUST_PROCESS_ENTRY ProcessEntries[1];
-    PF_ROBUST_FILE_ENTRY FileEntries[1];
-} PF_ROBUSTNESS_CONTROL, * PPF_ROBUSTNESS_CONTROL;
+    ULONG Reserved;
+    //
+    // Variable-size payload:
+    //   PF_ROBUST_PROCESS_ENTRY ProcessEntries[DeprioProcessCount + ExemptProcessCount];
+    //   PF_ROBUST_FILE_ENTRY FileEntries[DeprioFileCount + ExemptFileCount];
+    //
+    UCHAR Buffer[ANYSIZE_ARRAY];
+} PF_ROBUSTNESS_CONTROL, *PPF_ROBUSTNESS_CONTROL;
 
 // rev
 typedef struct _PF_SCENARIO_PREFETCH_INFO
@@ -561,30 +704,28 @@ typedef struct _PF_PHYSICAL_MEMORY_RANGE_INFO_V2
 // rev
 typedef struct _PF_START_TRACE_CONTROL
 {
-    struct
-    {
-        ULONG Type;
-        ULONG Mode;
-        ULONG Flags;
-        ULONG Restart;
-    };
-    struct
-    {
-        HANDLE PartitionHandle; // in
-        HANDLE TraceHandleOut;  // out when Restart == 0
-    };
-} PF_START_TRACE_CONTROL, * PPF_START_TRACE_CONTROL;
+    ULONG Version;             // 3
+    ULONG Type;                // 0 or 1
+    ULONG Flags;               // 0..3
+    ULONG Reserved;
+    HANDLE PartitionHandle;    // in
+    HANDLE TraceHandle;        // in/out; output when Type == 0
+} PF_START_TRACE_CONTROL, *PPF_START_TRACE_CONTROL;
+
 
 // rev
-#define PF_ACCESS_TRACING_CONTROL_VERSION 1
+#define PF_ACCESS_TRACING_CONTROL_VERSION 3
 
 // rev
 typedef struct _PF_ACCESS_TRACING_CONTROL
 {
-    ULONG Version;
-    ULONG Command;
-    ULONG ComponentMask;
-} PF_ACCESS_TRACING_CONTROL, * PPF_ACCESS_TRACING_CONTROL;
+    ULONG Version;             // PF_ACCESS_TRACING_CONTROL_VERSION
+    ULONG Type;                // 0 or 1
+    ULONG Flags;               // 0..3
+    ULONG Reserved;
+    HANDLE PartitionHandle;    // in
+    HANDLE TraceHandle;        // in/out; output when Type == 0
+} PF_ACCESS_TRACING_CONTROL, *PPF_ACCESS_TRACING_CONTROL;
 
 // rev
 #define PF_REPURPOSED_BY_PREFETCH_INFO_VERSION 1

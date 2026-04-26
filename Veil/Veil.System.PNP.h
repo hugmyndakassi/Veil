@@ -167,6 +167,29 @@ typedef enum _DEVICE_USAGE_NOTIFICATION_TYPE {
 
 #endif // !_KERNEL_MODE
 
+#if (NTDDI_VERSION < NTDDI_WIN8)
+__kernel_entry NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtGetPlugPlayEvent(
+    _In_ HANDLE EventHandle,
+    _In_opt_ PVOID Context,
+    _Out_writes_bytes_(EventBufferSize) PPLUGPLAY_EVENT_BLOCK EventBlock,
+    _In_ ULONG EventBufferSize
+);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwGetPlugPlayEvent(
+    _In_ HANDLE EventHandle,
+    _In_opt_ PVOID Context,
+    _Out_writes_bytes_(EventBufferSize) PPLUGPLAY_EVENT_BLOCK EventBlock,
+    _In_ ULONG EventBufferSize
+);
+#endif
+
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI

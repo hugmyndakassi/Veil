@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.ALPC.h
  * PURPOSE:   This file is part of Veil.
@@ -653,10 +653,14 @@ typedef struct _ALPC_PORT_ATTRIBUTES
 } ALPC_PORT_ATTRIBUTES, * PALPC_PORT_ATTRIBUTES;
 
 // begin_rev
-#define ALPC_MESSAGE_HANDLE_ATTRIBUTE   0x10000000
-#define ALPC_MESSAGE_CONTEXT_ATTRIBUTE  0x20000000
-#define ALPC_MESSAGE_VIEW_ATTRIBUTE     0x40000000
-#define ALPC_MESSAGE_SECURITY_ATTRIBUTE 0x80000000
+// This ordering matches how AlpcGetMessageAttribute computes offset (dmex)
+#define ALPC_MESSAGE_SECURITY_ATTRIBUTE        0x80000000 // ALPC_SECURITY_ATTR     // AlpcpCaptureSecurityAttribute
+#define ALPC_MESSAGE_VIEW_ATTRIBUTE            0x40000000 // ALPC_DATA_VIEW_ATTR    // AlpcpCaptureViewAttribute
+#define ALPC_MESSAGE_CONTEXT_ATTRIBUTE         0x20000000 // ALPC_CONTEXT_ATTR      // AlpcpCaptureContextAttribute
+#define ALPC_MESSAGE_HANDLE_ATTRIBUTE          0x10000000 // ALPC_HANDLE_ATTR       // AlpcpCaptureHandleAttribute
+#define ALPC_MESSAGE_RESERVED_ATTRIBUTE        0x08000000
+#define ALPC_MESSAGE_DIRECT_ATTRIBUTE          0x04000000 // AlpcpCaptureDirectAttribute
+#define ALPC_MESSAGE_WORK_ON_BEHALF_ATTRIBUTE  0x02000000 // AlpcpCaptureWorkOnBehalfAttribute
 
 // Convenience macro for all message attributes
 #define ALPC_MESSAGE_ATTRIBUTES_ALL \
@@ -766,8 +770,21 @@ typedef struct _ALPC_HANDLE_ATTR
     ACCESS_MASK GrantedAccess;
 } ALPC_HANDLE_ATTR, * PALPC_HANDLE_ATTR;
 
-#define ALPC_SECFLG_CREATE_HANDLE       0x20000 // dbg
-#define ALPC_SECFLG_NOSECTIONHANDLE     0x40000
+/*
+ * Delete/revoke existing security context
+ * 
+ * \remarks if ContextHandle == -2, this path is rejected
+ * \sa AlpcpCaptureSecurityAttribute, AlpcpCaptureSecurityAttributeInternal
+ */
+#define ALPC_SECFLG_DELETE_EXISTING 0x10000
+/*
+ * Create handle for new security context
+ * 
+ * \remarks When creating a new security context, create a handle and write it back to ContextHandle.
+ * \sa AlpcpCaptureSecurityAttribute / AlpcpCaptureSecurityAttributeInternal
+ */
+#define ALPC_SECFLG_CREATE_HANDLE 0x20000
+#define ALPC_SECFLG_NOSECTIONHANDLE 0x40000
 
 // private
 typedef struct _ALPC_SECURITY_ATTR
@@ -777,11 +794,10 @@ typedef struct _ALPC_SECURITY_ATTR
     ALPC_HANDLE ContextHandle; // dbg
 } ALPC_SECURITY_ATTR, * PALPC_SECURITY_ATTR;
 
-// begin_rev
+// NtAlpcCreateSectionView requires Flags == 0
 #define ALPC_VIEWFLG_UNMAP_EXISTING     0x10000
 #define ALPC_VIEWFLG_AUTO_RELEASE       0x20000
 #define ALPC_VIEWFLG_NOT_SECURE         0x40000
-// end_rev
 
 // private
 typedef struct _ALPC_DATA_VIEW_ATTR
@@ -791,6 +807,24 @@ typedef struct _ALPC_DATA_VIEW_ATTR
     PVOID ViewBase; // must be zero on input
     SIZE_T ViewSize;
 } ALPC_DATA_VIEW_ATTR, * PALPC_DATA_VIEW_ATTR;
+
+// rev
+typedef struct _ALPC_DIRECT_ATTR
+{
+    HANDLE EventHandle;
+} ALPC_DIRECT_ATTR, * PALPC_DIRECT_ATTR;
+
+// rev
+typedef struct _ALPC_DIRECT_ATTR32
+{
+    ULONG EventHandle;
+} ALPC_DIRECT_ATTR32, * PALPC_DIRECT_ATTR32;
+
+// rev
+typedef struct _ALPC_WORK_ON_BEHALF_ATTR
+{
+    ULONGLONG Ticket;
+} ALPC_WORK_ON_BEHALF_ATTR;
 
 // private
 typedef enum _ALPC_PORT_INFORMATION_CLASS
@@ -867,15 +901,24 @@ typedef struct _ALPC_SERVER_SESSION_INFORMATION
 } ALPC_SERVER_SESSION_INFORMATION, * PALPC_SERVER_SESSION_INFORMATION;
 
 // private
+typedef struct _ALPC_REGISTER_CALLBACK
+{
+    PVOID CallbackObject; // PCALLBACK_OBJECT
+    PVOID CallbackContext;
+} ALPC_REGISTER_CALLBACK, * PALPC_REGISTER_CALLBACK;
+
+// private
 typedef enum _ALPC_MESSAGE_INFORMATION_CLASS
 {
-    AlpcMessageSidInformation, // q: out SID
-    AlpcMessageTokenModifiedIdInformation,  // q: out LUID
-    AlpcMessageDirectStatusInformation,
-    AlpcMessageHandleInformation, // ALPC_MESSAGE_HANDLE_INFORMATION
+    AlpcMessageSidInformation,              // q: out SID   // Returns the sender/effective token SID for the message.
+    AlpcMessageTokenModifiedIdInformation,  // q: out LUID  // Returns the token ModifiedId as a LUID.
+    AlpcMessageDirectStatusInformation,     // q: VOID      // Returns the direct ALPC message operation has reached its completed state.
+    AlpcMessageHandleInformation,           // q: ALPC_MESSAGE_HANDLE_INFORMATION
     MaxAlpcMessageInfoClass
 } ALPC_MESSAGE_INFORMATION_CLASS, * PALPC_MESSAGE_INFORMATION_CLASS;
 
+// Initialize the first field with the transferred-handle index you want to resolve.
+// On success, the buffer is updated with the duplicated handle details.
 typedef struct _ALPC_MESSAGE_HANDLE_INFORMATION
 {
     ULONG Index;
@@ -908,12 +951,38 @@ ZwAlpcCreatePort(
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes
 );
 
+
+/**
+ * Defines flags for NtAlpcDisconnectPort
+ */
+typedef enum _ALPC_DISCONNECT_PORT_FLAGS
+{
+    /**
+     * Performs a standard ALPC port disconnect with no special behavior.
+     *
+     * \remarks This is the default disconnect mode and applies the normal
+     * disconnect/flush behavior implemented by the kernel.
+     */
+    ALPC_DISCONNECT_PORT_FLG_DEFAULT = 0x00000000,
+    /*
+     * When ALPC_DISCONNECT_PORT_FLG_SKIP_PENDING_FLUSH is set,
+     * ALPC skips the flush/cancel pass over the peer port's pending queue,
+     * while still flushing the peer main/large queues.
+     * "special disconnect" specifically means disconnect while preserving/skipping
+     * forced cancellation of pending queued reply-related messages on the peer side,
+     * unlike a normal disconnect which flushes that queue too
+     * \remarks Forwarded to AlpcpDisconnectPort, where it sets internal port state bit 0x80
+     * before the port is marked disconnected.
+     */
+    ALPC_DISCONNECT_PORT_FLG_SKIP_PENDING_FLUSH = 0x00000001
+} ALPC_DISCONNECT_PORT_FLAGS;
+
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtAlpcDisconnectPort(
     _In_ HANDLE PortHandle,
-    _In_ ULONG Flags
+    _In_ ALPC_DISCONNECT_PORT_FLAGS Flags
 );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -922,9 +991,8 @@ NTSTATUS
 NTAPI
 ZwAlpcDisconnectPort(
     _In_ HANDLE PortHandle,
-    _In_ ULONG Flags
+    _In_ ALPC_DISCONNECT_PORT_FLAGS Flags
 );
-
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI
@@ -1173,23 +1241,35 @@ ZwAlpcQueryInformationMessage(
     _Out_opt_ PULONG ReturnLength
 );
 
-#define ALPC_MSGFLG_REPLY_MESSAGE   0x1
-#define ALPC_MSGFLG_LPC_MODE        0x2 // ?
-#define ALPC_MSGFLG_RELEASE_MESSAGE 0x10000 // dbg
-#define ALPC_MSGFLG_SYNC_REQUEST    0x20000 // dbg
-#define ALPC_MSGFLG_WAIT_USER_MODE  0x100000
-#define ALPC_MSGFLG_WAIT_ALERTABLE  0x200000
-#define ALPC_MSGFLG_WOW64_CALL      0x80000000 // dbg
+/**
+ * Defines flags for NtAlpcConnectPort / NtAlpcSendWaitReceivePort
+ */
+typedef enum _ALPC_MESSAGE_FLAGS
+{
+    // Low 2 bits are historical/public ALPC message bits
+    ALPC_MSGFLG_REPLY_MESSAGE           = 0x00000001,
+    ALPC_MSGFLG_LPC_MODE                = 0x00000002,
+
+    // High-word message/connect flags
+    ALPC_MSGFLG_RELEASE_MESSAGE         = 0x00010000, // SendWaitReceive: synchronous-request path rejects this bit when a send message is present; debug/internal-style release semantic.
+    ALPC_MSGFLG_SYNC_REQUEST            = 0x00020000, // SendWaitReceive: selects AlpcpProcessSynchronousRequest instead of normal send/receive flow.
+    ALPC_MSGFLG_TRACK_PORT_REFERENCES   = 0x00040000, // SendWaitReceive: increments per-port reference tracking and may signal the tracking event.
+    ALPC_MSGFLG_WAIT_USER_MODE          = 0x00100000,
+    ALPC_MSGFLG_WAIT_ALERTABLE          = 0x00200000,
+    ALPC_MSGFLG_SIGNAL_ALERTABLE        = 0x00400000, // NtAlpcSendWaitReceivePort: passed as the alertable boolean to AlpcpSignal after shifting flags by 0x16.
+    ALPC_MSGFLG_INTERNAL_REJECT         = 0x01000000, // NtAlpcSendWaitReceivePort: explicit invalid-parameter reject in both sync and send paths.
+    ALPC_MSGFLG_WOW64_CALL              = 0x80000000,
+} ALPC_MESSAGE_FLAGS;
 
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtAlpcConnectPort(
     _Out_ PHANDLE PortHandle,
-    _In_ PUNICODE_STRING PortName,
+    _In_ PCUNICODE_STRING PortName,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_opt_ PSID RequiredServerSid,
     _Inout_updates_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ConnectionMessage,
     _Inout_opt_ PSIZE_T BufferLength,
@@ -1204,10 +1284,10 @@ NTSTATUS
 NTAPI
 ZwAlpcConnectPort(
     _Out_ PHANDLE PortHandle,
-    _In_ PUNICODE_STRING PortName,
+    _In_ PCUNICODE_STRING PortName,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_opt_ PSID RequiredServerSid,
     _Inout_updates_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ConnectionMessage,
     _Inout_opt_ PSIZE_T BufferLength,
@@ -1225,7 +1305,7 @@ NtAlpcConnectPortEx(
     _In_ POBJECT_ATTRIBUTES ConnectionPortObjectAttributes,
     _In_opt_ POBJECT_ATTRIBUTES ClientPortObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_opt_ PSECURITY_DESCRIPTOR ServerSecurityRequirements,
     _Inout_updates_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ConnectionMessage,
     _Inout_opt_ PSIZE_T BufferLength,
@@ -1243,7 +1323,7 @@ ZwAlpcConnectPortEx(
     _In_ POBJECT_ATTRIBUTES ConnectionPortObjectAttributes,
     _In_opt_ POBJECT_ATTRIBUTES ClientPortObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_opt_ PSECURITY_DESCRIPTOR ServerSecurityRequirements,
     _Inout_updates_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ConnectionMessage,
     _Inout_opt_ PSIZE_T BufferLength,
@@ -1253,13 +1333,20 @@ ZwAlpcConnectPortEx(
 );
 #endif
 
+typedef enum _ALPC_PORT_FLAGS
+{
+    ALPC_PORTFLG_NONE = 0x00000000,
+    ALPC_PORTFLG_WOW64_STYLE_HEADER = 0x80000000, // NtAlpcAcceptConnectPort wrapper/OpenSenderProcess path: top-bit selector for alternate 32-bit style message-header capture.
+    ALPC_PORTFLG_TOP_MASK = 0xC0000000, // Accept/OpenSenderProcess preserve only the top two bits from user Flags.
+} ALPC_PORT_FLAGS;
+
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtAlpcAcceptConnectPort(
     _Out_ PHANDLE PortHandle,
     _In_ HANDLE ConnectionPortHandle,
-    _In_ ULONG Flags,
+    _In_ ALPC_PORT_FLAGS Flags,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
     _In_opt_ PVOID PortContext,
@@ -1275,7 +1362,7 @@ NTAPI
 ZwAlpcAcceptConnectPort(
     _Out_ PHANDLE PortHandle,
     _In_ HANDLE ConnectionPortHandle,
-    _In_ ULONG Flags,
+    _In_ ALPC_PORT_FLAGS Flags,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_opt_ PALPC_PORT_ATTRIBUTES PortAttributes,
     _In_opt_ PVOID PortContext,
@@ -1289,7 +1376,7 @@ NTSTATUS
 NTAPI
 NtAlpcSendWaitReceivePort(
     _In_ HANDLE PortHandle,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_reads_bytes_opt_(SendMessage->u1.s1.TotalLength) PPORT_MESSAGE SendMessage,
     _Inout_opt_ PALPC_MESSAGE_ATTRIBUTES SendMessageAttributes,
     _Out_writes_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ReceiveMessage,
@@ -1304,7 +1391,7 @@ NTSTATUS
 NTAPI
 ZwAlpcSendWaitReceivePort(
     _In_ HANDLE PortHandle,
-    _In_ ULONG Flags,
+    _In_ ALPC_MESSAGE_FLAGS Flags,
     _In_reads_bytes_opt_(SendMessage->u1.s1.TotalLength) PPORT_MESSAGE SendMessage,
     _Inout_opt_ PALPC_MESSAGE_ATTRIBUTES SendMessageAttributes,
     _Out_writes_bytes_to_opt_(*BufferLength, *BufferLength) PPORT_MESSAGE ReceiveMessage,
@@ -1313,9 +1400,17 @@ ZwAlpcSendWaitReceivePort(
     _In_opt_ PLARGE_INTEGER Timeout
 );
 
-#define ALPC_CANCELFLG_TRY_CANCEL       0x1 // dbg
-#define ALPC_CANCELFLG_NO_CONTEXT_CHECK 0x8
-#define ALPC_CANCELFLGP_FLUSH       0x10000 // dbg
+/**
+ * Defines flags for NtAlpcCancelMessage
+ */
+typedef enum _ALPC_CANCEL_FLAGS
+{
+    ALPC_CANCELFLG_NONE                 = 0x00000000,
+    ALPC_CANCELFLG_TRY_CANCEL           = 0x00000001,
+    ALPC_CANCELFLG_RESERVED_CAPTURE32   = 0x00000004, // Used to select alternate PALPC_CONTEXT_ATTR field offsets for user-mode capture.
+    ALPC_CANCELFLG_NO_CONTEXT_CHECK     = 0x00000008, // Bypasses the default message-context ownership comparison and uses the alternate validation path.
+    ALPC_CANCELFLG_FLUSH                = 0x00010000,
+} ALPC_CANCEL_FLAGS;
 
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
@@ -1336,13 +1431,27 @@ ZwAlpcCancelMessage(
     _In_ PALPC_CONTEXT_ATTR MessageContext
 );
 
+
+/**
+ * Defines flags for NtAlpcImpersonateClientOfPort
+ */
+typedef enum _ALPC_IMPERSONATE_FLAGS
+{
+    ALPC_IMPERSONATEFLG_ANONYMOUS               = 0x00000001, // Enables anonymous-style impersonation behavior.
+    ALPC_IMPERSONATEFLG_REQUIRE_IMPERSONATE     = 0x00000002, // Requires impersonation-level gating/eligibility.
+    ALPC_IMPERSONATEFLG_LEVEL_ANONYMOUS         = (0u << 2),  // SECURITY_ANONYMOUS
+    ALPC_IMPERSONATEFLG_LEVEL_IDENTIFICATION    = (1u << 2),  // SECURITY_IDENTIFICATION
+    ALPC_IMPERSONATEFLG_LEVEL_IMPERSONATION     = (2u << 2),  // SECURITY_IMPERSONATION
+    ALPC_IMPERSONATEFLG_LEVEL_DELEGATION        = (3u << 2),  // SECURITY_DELEGATION
+} ALPC_IMPERSONATE_FLAGS;
+
 __kernel_entry NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtAlpcImpersonateClientOfPort(
     _In_ HANDLE PortHandle,
     _In_ PPORT_MESSAGE Message,
-    _In_ ULONG Flags
+    _In_ ALPC_IMPERSONATE_FLAGS Flags
 );
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -1352,7 +1461,7 @@ NTAPI
 ZwAlpcImpersonateClientOfPort(
     _In_ HANDLE PortHandle,
     _In_ PPORT_MESSAGE Message,
-    _In_ ULONG Flags
+    _In_ ALPC_IMPERSONATE_FLAGS Flags
 );
 
 #if (NTDDI_VERSION >= NTDDI_WIN10)
@@ -1383,7 +1492,7 @@ NtAlpcOpenSenderProcess(
     _Out_ PHANDLE ProcessHandle,
     _In_ HANDLE PortHandle,
     _In_ PPORT_MESSAGE PortMessage,
-    _Reserved_ ULONG Flags,
+    _In_ ALPC_PORT_FLAGS Flags,
     _In_ ACCESS_MASK DesiredAccess,
     _In_ POBJECT_ATTRIBUTES ObjectAttributes
 );
@@ -1396,7 +1505,7 @@ ZwAlpcOpenSenderProcess(
     _Out_ PHANDLE ProcessHandle,
     _In_ HANDLE PortHandle,
     _In_ PPORT_MESSAGE PortMessage,
-    _Reserved_ ULONG Flags,
+    _In_ ALPC_PORT_FLAGS Flags,
     _In_ ACCESS_MASK DesiredAccess,
     _In_ POBJECT_ATTRIBUTES ObjectAttributes
 );

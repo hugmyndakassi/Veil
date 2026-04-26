@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.Debug.h
  * PURPOSE:   This file is part of Veil.
@@ -750,7 +750,7 @@ NTAPI
 NtCreateDebugObject(
     _Out_ PHANDLE DebugObjectHandle,
     _In_ ACCESS_MASK DesiredAccess,
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ PCOBJECT_ATTRIBUTES ObjectAttributes,
     _In_ ULONG Flags
 );
 
@@ -761,7 +761,7 @@ NTAPI
 ZwCreateDebugObject(
     _Out_ PHANDLE DebugObjectHandle,
     _In_ ACCESS_MASK DesiredAccess,
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ PCOBJECT_ATTRIBUTES ObjectAttributes,
     _In_ ULONG Flags
 );
 

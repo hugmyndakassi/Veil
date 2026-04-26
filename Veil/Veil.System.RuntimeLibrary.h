@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.RuntimeLibrary.h
  * PURPOSE:   This file is part of Veil.
@@ -14787,8 +14787,62 @@ NTAPI
 FsRtlReleaseFileNameInformation(
     _In_ PVOID FileNameInformation
 );
-
 #endif // _KERNEL_MODE
+
+// private
+typedef enum _CSR_SUBSYSTEM_ID
+{
+    CsrSubsystemIdUnknown = 0,
+    CsrSubsystemIdWindows = 1,
+    CsrSubsystemIdPosix = 2,
+    CsrSubsystemIdSrv = 3,
+    CsrSubsystemIdMax
+} CSR_SUBSYSTEM_ID, *PCSR_SUBSYSTEM_ID;
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+CsrClientConnectToServer(
+    _In_ PWSTR ObjectRoot,
+    _In_ CSR_SUBSYSTEM_ID SubsystemId,
+    _In_ PVOID ConnectionInfo,
+    _Inout_ PULONG ConnectionInfoLength,
+    _Out_ PBOOLEAN ServerToServerCall
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+CsrClientCallServer(
+    _Inout_ PVOID Request,
+    _Inout_opt_ PVOID Reply,
+    _In_ ULONG ApiNumber,
+    _In_ ULONG RequestLength
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+CsrCaptureMessage(
+    _In_ HANDLE PortHandle,
+    _In_ PVOID Message
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+CsrIdentifyAlertable(
+    VOID
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+CsrSetPriorityClass(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PULONG PriorityClass
+    );
+
 
 VEIL_END()
 

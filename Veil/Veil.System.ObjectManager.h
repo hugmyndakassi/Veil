@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.ObjectManager.h
  * PURPOSE:   This file is part of Veil.
@@ -57,14 +57,14 @@ VEIL_BEGIN()
 #ifndef _KERNEL_MODE
 typedef enum _OBJECT_INFORMATION_CLASS
 {
-    ObjectBasicInformation, // q: OBJECT_BASIC_INFORMATION
-    ObjectNameInformation, // q: OBJECT_NAME_INFORMATION
-    ObjectTypeInformation, // q: OBJECT_TYPE_INFORMATION
-    ObjectTypesInformation, // q: OBJECT_TYPES_INFORMATION
-    ObjectHandleFlagInformation, // qs: OBJECT_HANDLE_FLAG_INFORMATION
-    ObjectSessionInformation, // s: void // change object session // (requires SeTcbPrivilege)
+    ObjectBasicInformation,         // q: OBJECT_BASIC_INFORMATION
+    ObjectNameInformation,          // q: OBJECT_NAME_INFORMATION
+    ObjectTypeInformation,          // q: OBJECT_TYPE_INFORMATION
+    ObjectTypesInformation,         // q: OBJECT_TYPES_INFORMATION
+    ObjectHandleFlagInformation,    // qs: OBJECT_HANDLE_FLAG_INFORMATION
+    ObjectSessionInformation,       // s: void // change object session // (requires SeTcbPrivilege)
     ObjectSessionObjectInformation, // s: void // change object session // (requires SeTcbPrivilege)
-    ObjectSetRefTraceInformation, // since 25H2
+    ObjectSetRefTraceInformation,   // since 25H2
     MaxObjectInfoClass
 } OBJECT_INFORMATION_CLASS;
 #else

@@ -9,7 +9,7 @@
 
 ## Project Overview
 
-**Veil** is a Windows native API header library that provides comprehensive declarations for undocumented Windows NT kernel and user-mode APIs. The project synchronizes with [phnt](https://github.com/winsiderss/phnt) (Process Hacker Native API) and adapts it to Veil's coding conventions.
+**Veil** is a Windows native API header library that provides comprehensive declarations for undocumented Windows NT kernel and user-mode APIs. The project synchronizes with [phnt](https://github.com/winsiderss/systeminformer/tree/master/phnt) (Process Hacker Native API) and adapts it to Veil's coding conventions.
 
 ### Key Characteristics
 
@@ -106,135 +106,13 @@ Execute `BuildAllTargets.cmd` in the `Veil.Test` directory.
 
 ## Update Workflow
 
-### Overview
+The phnt synchronization procedure has been extracted into the `veil-update` skill.
+It triggers automatically when you mention updating Veil, syncing phnt, applying
+upstream changes, VERSION_COMMIT, or working with the systeminformer repository.
 
-The update process synchronizes changes from the **phnt** repository to the **Veil** headers while maintaining Veil's coding conventions.
-
-### Step-by-Step Procedure
-
-1. **Prepare Sources**
-   - Read the current upstream commit hash from the `VERSION_COMMIT` file (root of the repository).
-   - Sparse-clone the [systeminformer](https://github.com/winsiderss/systeminformer) repository into `.cache/systeminformer/` to obtain the latest `phnt/include/` headers.
-   - Use `git diff <old-commit> <new-commit> -- phnt/include/` to generate per-file diffs. Save each diff to `.cache/diffs/`.
-   - Skip `nttypesafe.h` (no Veil mapping).
-
-2. **Apply Changes**
-   - Apply diff content to the corresponding Veil header files (see [File Mapping Reference](#file-mapping-reference)).
-   - Skip files without a mapping relationship.
-
-3. **Macro Conversion**
-   - Replace all `PHNT_WINDOWS_*` macros with the corresponding `NTDDI_*` macros.
-   - See [Macro Mapping Table](#macro-mapping-table) below.
-
-4. **Nt Function Formatting**
-   - Add `__kernel_entry` attribute before `NTSYSCALLAPI`.
-   - Adjust closing parenthesis alignment.
-
-   **Before (phnt style):**
-   ```cpp
-   NTSYSCALLAPI
-   NTSTATUS
-   NTAPI
-   NtFlushKey(
-       _In_ HANDLE KeyHandle
-       );
-   ```
-
-   **After (Veil style):**
-   ```cpp
-   __kernel_entry NTSYSCALLAPI
-   NTSTATUS
-   NTAPI
-   NtFlushKey(
-       _In_ HANDLE KeyHandle
-   );
-   ```
-
-5. **Generate Zw Function Pair**
-   - Immediately after each `Nt*` function, add the corresponding `Zw*` function.
-   - Use `_IRQL_requires_max_(PASSIVE_LEVEL)` and `NTSYSAPI` for `Zw*` functions.
-
-   **Example:**
-   ```cpp
-   __kernel_entry NTSYSCALLAPI
-   NTSTATUS
-   NTAPI
-   NtFlushKey(
-       _In_ HANDLE KeyHandle
-   );
-
-   _IRQL_requires_max_(PASSIVE_LEVEL)
-   NTSYSAPI
-   NTSTATUS
-   NTAPI
-   ZwFlushKey(
-       _In_ HANDLE KeyHandle
-   );
-   ```
-
-6. **Additional Conventions**
-   - Replace `static_assert` with `STATIC_ASSERT` (Veil convention).
-   - Sync Zw function parameter annotation fixes from upstream when applicable.
-
-7. **Validation**
-   - **After each file update, run `BuildAllTargets.cmd` to verify compilation.**
-   - Kill zombie MSBuild processes before each build: `taskkill /f /im MSBuild.exe`.
-   - Check for compilation errors before proceeding to the next file.
-   - Verify definition order and dependencies.
-
-8. **Finalize**
-   - Update the `VERSION_COMMIT` file with the new upstream commit hash (hash only, no URL or date).
-   - Report changes from `ntmisc.h` separately to the user.
-   - Clean up `.cache/` directory after completion.
-
----
-
-## Macro Mapping Table
-
-| phnt Macro | Veil Macro |
-|------------|------------|
-| `PHNT_WINDOWS_OLDEST` | `NTDDI_WIN2K` |
-| `PHNT_WINDOWS_XP` | `NTDDI_WINXP` |
-| `PHNT_WINDOWS_SERVER_2003` | `NTDDI_WS03` |
-| `PHNT_WINDOWS_VISTA` | `NTDDI_VISTA` |
-| `PHNT_WINDOWS_7` | `NTDDI_WIN7` |
-| `PHNT_WINDOWS_8` | `NTDDI_WIN8` |
-| `PHNT_WINDOWS_8_1` | `NTDDI_WINBLUE` |
-| `PHNT_WINDOWS_10` | `NTDDI_WIN10` |
-| `PHNT_WINDOWS_10_TH2` | `NTDDI_WIN10_TH2` |
-| `PHNT_WINDOWS_10_RS1` | `NTDDI_WIN10_RS1` |
-| `PHNT_WINDOWS_10_RS2` | `NTDDI_WIN10_RS2` |
-| `PHNT_WINDOWS_10_RS3` | `NTDDI_WIN10_RS3` |
-| `PHNT_WINDOWS_10_RS4` | `NTDDI_WIN10_RS4` |
-| `PHNT_WINDOWS_10_RS5` | `NTDDI_WIN10_RS5` |
-| `PHNT_WINDOWS_10_19H1` | `NTDDI_WIN10_19H1` |
-| `PHNT_WINDOWS_10_19H2` | `NTDDI_WIN10_19H1` |
-| `PHNT_WINDOWS_10_20H1` | `NTDDI_WIN10_VB` |
-| `PHNT_WINDOWS_10_20H2` | `NTDDI_WIN10_MN` |
-| `PHNT_WINDOWS_10_21H1` | `NTDDI_WIN10_FE` |
-| `PHNT_WINDOWS_10_21H2` | `NTDDI_WIN10_CO` |
-| `PHNT_WINDOWS_10_22H2` | `NTDDI_WIN10_CO` |
-| `PHNT_WINDOWS_11` | `NTDDI_WIN11` |
-| `PHNT_WINDOWS_11_22H2` | `NTDDI_WIN11_NI` |
-| `PHNT_WINDOWS_11_23H2` | `NTDDI_WIN11_NI` |
-| `PHNT_WINDOWS_11_24H2` | `NTDDI_WIN11_GE` |
-| `PHNT_WINDOWS_NEW` | `NTDDI_WIN11_BR` |
-
-### Conditional Compilation Example
-
-**Before (phnt):**
-```cpp
-#if (PHNT_VERSION >= PHNT_WINDOWS_10_RS1)
-// code
-#endif
-```
-
-**After (Veil):**
-```cpp
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
-// code
-#endif
-```
+To invoke it, simply ask to update Veil or sync from phnt — the skill will
+handle the full workflow: prepare sources, apply diffs, convert macros,
+format functions, generate Zw pairs, validate, and finalize.
 
 ---
 
@@ -334,50 +212,6 @@ typedef struct _STRUCTURE_NAME
 // Kernel-mode only definitions
 #endif // _KERNEL_MODE
 ```
-
----
-
-## File Mapping Reference
-
-### Header Files
-
-| Veil Header | phnt Source |
-|-------------|-------------|
-| `Veil.h` | Main header (includes all sub-headers) |
-| `Veil/Veil.System.ALPC.h` | `ntlpcapi.h` |
-| `Veil/Veil.System.BCD.h` | `ntbcd.h` |
-| `Veil/Veil.System.ConfigurationManager.h` | `ntregapi.h` |
-| `Veil/Veil.System.Debug.h` | `ntdbg.h` |
-| `Veil/Veil.System.Device.Afd.h` | `ntafd.h` |
-| `Veil/Veil.System.Etw.h` | `ntwmi.h` |
-| `Veil/Veil.System.Executive.h` | `ntexapi.h` |
-| `Veil/Veil.System.IOManager.h` | `ntioapi.h` |
-| `Veil/Veil.System.KernelCore.h` | `ntkeapi.h` |
-| `Veil/Veil.System.Loader.h` | `ntldr.h` |
-| `Veil/Veil.System.MemoryManager.h` | `ntmmapi.h` |
-| `Veil/Veil.System.Nls.h` | `ntnls.h` |
-| `Veil/Veil.System.ObjectManager.h` | `ntobapi.h` |
-| `Veil/Veil.System.PNP.h` | `ntpnpapi.h` |
-| `Veil/Veil.System.PowerManager.h` | `ntpoapi.h` |
-| `Veil/Veil.System.Prefetcher.h` | `ntpfapi.h` |
-| `Veil/Veil.System.Process.h` | `ntpsapi.h` |
-| `Veil/Veil.System.RuntimeLibrary.h` | `ntrtl.h` |
-| `Veil/Veil.System.SAM.h` | `ntsam.h` |
-| `Veil/Veil.System.Security.h` | `ntseapi.h` |
-| `Veil/Veil.System.SMBios.h` | `smbios.h` |
-| `Veil/Veil.System.SMSS.h` | `ntsmss.h` |
-| `Veil/Veil.System.SxS.h` | `ntsxs.h` |
-| `Veil/Veil.System.ThreadPool.h` | `nttp.h` |
-| `Veil/Veil.System.TransactionManager.h` | `nttmapi.h` |
-| `Veil/Veil.System.UserManagerService.h` | `usermgr.h` |
-| `Veil/Veil.System.WindowStation.h` | `winsta.h` |
-| `Veil/Veil.System.Win32.h` | `ntuser.h` |
-| `Veil/Veil.System.AppPackage.h` | `ntmisc.h` (partial - Package APIs only) |
-
-### Unmapped phnt Files (Partially Mapped)
-
-- `ntmisc.h` - Package APIs mapped to `Veil.System.AppPackage.h`; other content (COM/OLE, AppCompat) not mapped
-- Files without corresponding Veil headers
 
 ---
 

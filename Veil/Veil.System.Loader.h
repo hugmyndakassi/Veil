@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.Loader.h
  * PURPOSE:   This file is part of Veil.
@@ -170,7 +170,24 @@ typedef enum _LDR_HOT_PATCH_STATE
     LdrHotPatchAppliedForward,
     LdrHotPatchFailedToPatch,
     LdrHotPatchStateMax,
-} LDR_HOT_PATCH_STATE, * PLDR_HOT_PATCH_STATE;
+} LDR_HOT_PATCH_STATE, *PLDR_HOT_PATCH_STATE;
+
+// private
+typedef struct _LDR_PATCH_TABLE
+{
+    ULONG_PTR Version;
+    PVOID LdrLoadDll;
+    PVOID LdrGetProcedureAddress;
+    PVOID LdrLoadDllFull;
+    PVOID LdrGetProcedureAddressForCaller;
+    PVOID LdrRegisterDllNotification;
+    PVOID LdrUnregisterDllNotification;
+    PVOID LdrResSearchResource;
+    PVOID LdrAccessResource;
+    PVOID LdrFindResource_U;
+    PVOID LdrFindResourceDirectory_U;
+    PVOID LdrLoadEnclaveModule;
+} LDR_PATCH_TABLE, *PLDR_PATCH_TABLE;
 
 // LDR_DATA_TABLE_ENTRY->Flags
 #define LDRP_PACKAGED_BINARY            0x00000001
@@ -202,11 +219,18 @@ typedef enum _LDR_HOT_PATCH_STATE
 #define LDRP_REDIRECTED                 0x10000000
 #define LDRP_COMPAT_DATABASE_PROCESSED  0x80000000
 
+// since WIN11_24H2
+#define LDRP_PATCHED_BINARY             0x08000000
+#define LDRP_HOT_PATCHED                0x20000000
+
 #define LDR_DATA_TABLE_ENTRY_SIZE_WINXP FIELD_OFFSET(LDR_DATA_TABLE_ENTRY, DdagNode)
 #define LDR_DATA_TABLE_ENTRY_SIZE_WIN7 FIELD_OFFSET(LDR_DATA_TABLE_ENTRY, BaseNameHashValue)
 #define LDR_DATA_TABLE_ENTRY_SIZE_WIN8 FIELD_OFFSET(LDR_DATA_TABLE_ENTRY, ImplicitPathOptions)
 #define LDR_DATA_TABLE_ENTRY_SIZE_WIN10 FIELD_OFFSET(LDR_DATA_TABLE_ENTRY, SigningLevel)
 #define LDR_DATA_TABLE_ENTRY_SIZE_WIN11 sizeof(LDR_DATA_TABLE_ENTRY)
+
+// private
+#define LDR_SEARCH_DEFAULT_DIRS               0x00001000 // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
 
 // symbols
 typedef struct _LDR_DATA_TABLE_ENTRY

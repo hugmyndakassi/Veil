@@ -193,6 +193,42 @@ ZwCallbackReturn(
     _In_ ULONG OutputLength,
     _In_ NTSTATUS Status
 );
+__kernel_entry NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtQueryDebugFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level
+);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwQueryDebugFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level
+);
+
+__kernel_entry NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtSetDebugFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_ BOOLEAN State
+);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwSetDebugFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_ BOOLEAN State
+);
+
 
 __kernel_entry NTSYSCALLAPI
 NTSTATUS

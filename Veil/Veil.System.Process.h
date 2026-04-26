@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.Process.h
  * PURPOSE:   This file is part of Veil.
@@ -595,6 +595,25 @@ STATIC_ASSERT(sizeof(APPCOMPAT_EXE_DATA) == 0xE98, "APPCOMPAT_EXE_DATA size mism
 // symbols
 typedef struct _RTL_BITMAP* PRTL_BITMAP;
 
+// private
+typedef _Function_class_(PS_PROCESS_START_ROUTINE)
+VOID NTAPI PS_PROCESS_START_ROUTINE(
+    _In_ PVOID Parameter
+    );
+typedef PS_PROCESS_START_ROUTINE* PPS_PROCESS_START_ROUTINE;
+
+
+// private
+typedef struct _WER_REGISTRATION_DATA
+{
+    PVOID Context;
+    PVOID CallbackContext;
+    PVOID ShipAssertCallback;
+    PVOID WatsonAssertCallback;
+    PVOID ErrorCallback;
+    PVOID ValidCallbackMask;
+} WER_REGISTRATION_DATA, *PWER_REGISTRATION_DATA;
+
 /**
  * Process Environment Block (PEB) structure.
  *
@@ -866,7 +885,7 @@ typedef struct _PEB
     //
     // Pointer to the process starter helper.
     //
-    PVOID ProcessStarterHelper;
+    PPS_PROCESS_START_ROUTINE ProcessStarterHelper;
 
     //
     // The maximum number of GDI function calls during batch operations (GdiSetBatchLimit)
@@ -1006,7 +1025,7 @@ typedef struct _PEB
     //
     // Pointer to the patch loader data.
     //
-    PVOID PatchLoaderData;
+    PLDR_PATCH_TABLE PatchLoaderData;
 
     //
     // Pointer to the CHPE V2 process information. CHPEV2_PROCESS_INFO
@@ -1051,7 +1070,7 @@ typedef struct _PEB
     //
     // Pointer to the application WER assert pointer.
     //
-    PVOID WerShipAssertPtr;
+    PWER_REGISTRATION_DATA WerShipAssertPtr;
 
     //
     // Pointer to the EC bitmap on ARM64. (Windows 11 and above)
@@ -2494,6 +2513,22 @@ typedef struct _LDT_ENTRY
 #define WOW64_CONTEXT_EXCEPTION_REQUEST     0x40000000
 #define WOW64_CONTEXT_EXCEPTION_REPORTING   0x80000000
 
+#define CONTEXT_ARM                       (0x00200000L)
+#define CONTEXT_ARM_CONTROL               (CONTEXT_ARM | 0x1L)
+#define CONTEXT_ARM_INTEGER               (CONTEXT_ARM | 0x2L)
+#define CONTEXT_ARM_FLOATING_POINT        (CONTEXT_ARM | 0x4L)
+#define CONTEXT_ARM_DEBUG_REGISTERS       (CONTEXT_ARM | 0x8L)
+#define CONTEXT_ARM_FULL                  (CONTEXT_ARM_CONTROL | CONTEXT_ARM_INTEGER | CONTEXT_ARM_FLOATING_POINT)
+#define CONTEXT_ARM_ALL                   (CONTEXT_ARM_CONTROL | CONTEXT_ARM_INTEGER | CONTEXT_ARM_FLOATING_POINT | CONTEXT_ARM_DEBUG_REGISTERS)
+
+#define ARM_MAX_BREAKPOINTS     8
+#define ARM_MAX_WATCHPOINTS     1
+
+typedef struct _ARM_NT_NEON128 {
+    ULONGLONG Low;
+    LONGLONG High;
+} ARM_NT_NEON128, *PARM_NT_NEON128;
+
 #endif // !defined(RC_INVOKED)
 
 //
@@ -3297,7 +3332,110 @@ typedef struct _PROCESS_DEVICEMAP_INFORMATION_EX
 typedef struct _PROCESS_SESSION_INFORMATION
 {
     ULONG SessionId;
-} PROCESS_SESSION_INFORMATION, * PPROCESS_SESSION_INFORMATION;
+} PROCESS_SESSION_INFORMATION, *PPROCESS_SESSION_INFORMATION;
+
+/**
+ * The PROCESS_DEFAULT_HARD_ERROR_MODE structure is used to query or set the process default hard error mode.
+ */
+typedef struct _PROCESS_DEFAULT_HARD_ERROR_MODE
+{
+    ULONG DefaultHardErrorMode;
+} PROCESS_DEFAULT_HARD_ERROR_MODE, *PPROCESS_DEFAULT_HARD_ERROR_MODE;
+
+/**
+ * The PROCESS_USER_MODE_IOPL structure is used to query or set the process user-mode IOPL state.
+ */
+typedef struct _PROCESS_USER_MODE_IOPL
+{
+    ULONG UserModeIOPL;
+} PROCESS_USER_MODE_IOPL, *PPROCESS_USER_MODE_IOPL;
+
+/**
+ * The PROCESS_LUID_DEVICE_MAPS_ENABLED structure is used to query whether LUID device maps are enabled for a process.
+ */
+typedef struct _PROCESS_LUID_DEVICE_MAPS_ENABLED
+{
+    ULONG LuidDeviceMapsEnabled;
+} PROCESS_LUID_DEVICE_MAPS_ENABLED, *PPROCESS_LUID_DEVICE_MAPS_ENABLED;
+
+/**
+ * The PROCESS_GROUP_INFORMATION structure is used to query the group numbers associated with a process.
+ */
+typedef struct _PROCESS_GROUP_INFORMATION
+{
+    USHORT Groups[1];
+} PROCESS_GROUP_INFORMATION, *PPROCESS_GROUP_INFORMATION;
+
+/**
+ * The PROCESS_HANDLE_CHECKING_MODE structure is used to query or set process handle checking mode.
+ */
+typedef struct _PROCESS_HANDLE_CHECKING_MODE
+{
+    ULONG HandleCheckingMode;
+} PROCESS_HANDLE_CHECKING_MODE, *PPROCESS_HANDLE_CHECKING_MODE;
+
+typedef PROCESS_HANDLE_CHECKING_MODE PROCESS_RAISE_UM_EXCEPTION_ON_INVALID_HANDLE_CLOSE, *PPROCESS_RAISE_UM_EXCEPTION_ON_INVALID_HANDLE_CLOSE;
+
+/**
+ * The PROCESS_RAISE_PRIORITY structure is used to raise the priority of a process.
+ */
+typedef struct _PROCESS_RAISE_PRIORITY
+{
+    ULONG RaisePriority;
+} PROCESS_RAISE_PRIORITY, *PPROCESS_RAISE_PRIORITY;
+
+/**
+ * The PROCESS_PRIORITY_BOOST structure is used to query or set process priority boost behavior.
+ */
+typedef struct _PROCESS_PRIORITY_BOOST
+{
+    ULONG PriorityBoost;
+} PROCESS_PRIORITY_BOOST, *PPROCESS_PRIORITY_BOOST;
+
+/**
+ * The PROCESS_DEBUG_FLAGS structure is used to query or set process debug inheritance behavior.
+ */
+typedef struct _PROCESS_DEBUG_FLAGS
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG NoDebugInherit : 1;
+            ULONG Spare : 31;
+        };
+    };
+} PROCESS_DEBUG_FLAGS, *PPROCESS_DEBUG_FLAGS;
+
+/**
+ * The PROCESS_EXECUTE_FLAGS structure is used to query or set per-process execute options.
+ */
+typedef struct _PROCESS_EXECUTE_FLAGS
+{
+    union
+    {
+        ULONG Flags; // MEM_EXECUTE_OPTION_*
+        struct
+        {
+            ULONG Disable : 1; // MEM_EXECUTE_OPTION_DISABLE
+            ULONG Enable : 1; // MEM_EXECUTE_OPTION_ENABLE
+            ULONG DisableThunkEmulation : 1; // MEM_EXECUTE_OPTION_DISABLE_THUNK_EMULATION
+            ULONG Permanent : 1; // MEM_EXECUTE_OPTION_PERMANENT
+            ULONG ExecuteDispatchEnable : 1; // MEM_EXECUTE_OPTION_EXECUTE_DISPATCH_ENABLE
+            ULONG ImageDispatchEnable : 1; // MEM_EXECUTE_OPTION_IMAGE_DISPATCH_ENABLE
+            ULONG DisableExceptionChainValidation : 1; // MEM_EXECUTE_OPTION_DISABLE_EXCEPTION_CHAIN_VALIDATION
+            ULONG Spare : 25;
+        };
+    };
+} PROCESS_EXECUTE_FLAGS, *PPROCESS_EXECUTE_FLAGS;
+
+//
+// PROCESS_ENERGY_TRACKING_STATE flags.
+//
+#define PROCESS_ENERGY_STATE_FOREGROUND        0x00000004UL
+#define PROCESS_ENERGY_STATE_DESKTOP_VISIBLE   0x00000008UL
+#define PROCESS_ENERGY_STATE_PSM_FOREGROUND    0x00000010UL
 
 #define PROCESS_HANDLE_EXCEPTIONS_ENABLED 0x00000001
 
@@ -3388,6 +3526,14 @@ typedef struct _PROCESS_TLS_INFORMATION
     _Field_size_(ThreadDataCount) THREAD_TLS_INFORMATION ThreadData[1]; // Array of THREAD_TLS_INFORMATION structures.
 } PROCESS_TLS_INFORMATION, * PPROCESS_TLS_INFORMATION;
 
+#define PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION_VERSION 0
+
+typedef _Function_class_(PROCESS_INSTRUMENTATION_CALLBACK)
+VOID NTAPI PROCESS_INSTRUMENTATION_CALLBACK(
+    VOID
+    );
+typedef PROCESS_INSTRUMENTATION_CALLBACK* PPROCESS_INSTRUMENTATION_CALLBACK;
+
 /**
  * The PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION structure contains information about the instrumentation callback for a process.
  */
@@ -3395,8 +3541,8 @@ typedef struct _PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION
 {
     ULONG Version;  // The version of the instrumentation callback information.
     ULONG Reserved; // Reserved for future use.
-    PVOID Callback; // Pointer to the callback function.
-} PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION, * PPROCESS_INSTRUMENTATION_CALLBACK_INFORMATION;
+    PPROCESS_INSTRUMENTATION_CALLBACK Callback; // Pointer to the callback function.
+} PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION, *PPROCESS_INSTRUMENTATION_CALLBACK_INFORMATION;
 
 /**
  * The PROCESS_STACK_ALLOCATION_INFORMATION structure contains information about the stack allocation for a process.
@@ -3517,6 +3663,19 @@ typedef struct _PROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY
         } DUMMYSTRUCTNAME;
     } DUMMYUNIONNAME;
 } PROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY, * PPROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY;
+typedef struct _PROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY2
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG AssemblyManifestRedirectionTrust : 1;
+            ULONG ReservedFlags : 31;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME;
+} PROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY2, * PPROCESS_MITIGATION_ACTIVATION_CONTEXT_TRUST_POLICY2;
+
 
 /**
  * The PROCESS_MITIGATION_POLICY_INFORMATION structure represents the different process mitigation policies.
@@ -6472,6 +6631,10 @@ typedef enum _PS_ATTRIBUTE_NUM
     PsAttributeValue(PsAttributeComponentFilter, FALSE, TRUE, FALSE)
 #define PS_ATTRIBUTE_ENABLE_OPTIONAL_XSTATE_FEATURES \
     PsAttributeValue(PsAttributeEnableOptionalXStateFeatures, TRUE, TRUE, FALSE)
+#define PS_ATTRIBUTE_SUPPORTED_MACHINES \
+    PsAttributeValue(PsAttributeSupportedMachines, FALSE, TRUE, FALSE)
+#define PS_ATTRIBUTE_SVE_VECTOR_LENGTH \
+    PsAttributeValue(PsAttributeSveVectorLength, FALSE, TRUE, FALSE)
 
 // end_rev
 
@@ -7188,6 +7351,7 @@ typedef struct _JOBOBJECT_ENERGY_TRACKING_STATE
     ULONG UpdateMask;
     ULONG DesiredState;
 } JOBOBJECT_ENERGY_TRACKING_STATE, * PJOBOBJECT_ENERGY_TRACKING_STATE;
+
 
 // private
 _Enum_is_bitflag_
