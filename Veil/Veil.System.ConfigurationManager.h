@@ -1,4 +1,4 @@
- /*
+/*
  * PROJECT:   Veil
  * FILE:      Veil.System.ConfigurationManager.h
  * PURPOSE:   This file is part of Veil.
